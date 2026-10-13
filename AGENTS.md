@@ -1,6 +1,6 @@
 # Microduck-build-tutorial（FanGe 树）
 
-FanGe 路线 Microduck 复刻仓库（本地 fork：`dengchenlong/Microduck-build-tutorial`，上游 `AI-FanGe/Microduck-build-tutorial` 只读）。当前活跃特性：混搭 14 舵机版（HD-1910，无臂形态），spec 在 `.scratch/armless-hd1910/spec.md`，票据在本仓库 GitHub Issues。
+FanGe 路线 Microduck 复刻仓库（本地 fork：`dengchenlong/Microduck-build-tutorial`，上游 `AI-FanGe/Microduck-build-tutorial` 只读）。当前活跃特性：混搭 14 舵机版（HD-1910，无臂形态），spec 见 GitHub issue #1，票据 #2–#12（子票挂在 #1 下）。
 
 ## Agent skills
 
