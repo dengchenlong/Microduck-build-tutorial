@@ -1,0 +1,21 @@
+name: guardrails
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shell syntax check
+        run: |
+          find . -name "*.sh" -type f -print0 | xargs -0 -n1 bash -n
+      - name: python syntax check
+        run: |
+          find . -name "*.py" -type f -print0 | xargs -0 -n1 python3 -m py_compile
+      - name: eol check (WSL files must stay LF)
+        run: |
+          ! grep -rlI $'\r' --include='*.sh' --include='*.py' .

@@ -1,0 +1,18 @@
+# Force LF for files consumed by WSL (bash/python); the host is Windows with core.autocrlf=true
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.xml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.onnx binary
+*.stl binary
+*.3mf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
