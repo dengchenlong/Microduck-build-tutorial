@@ -47,10 +47,18 @@ _placo = types.ModuleType("placo")
 sys.modules.setdefault("placo", _placo)
 from scheduler import Scheduler  # noqa: E402
 
-# Code name -> MJCF joint/actuator name in this checkout's robot.xml
+# Code name -> MJCF joint/actuator name.
+# The armless 14-DoF MJCF (robot_armless_14.xml) names its joints/actuators
+# exactly like the constants motors (incl. the 4 head/neck joints), so only
+# the ankle alias from the old 19-DoF table is still needed.
 ALIAS = {
     "right_ankle": "right_ankle_pitch",
     "left_ankle": "left_ankle_pitch",
+}
+
+# Aliases needed only by the legacy 19-DoF MJCF (robot.xml): one head hinge,
+# so the four head/neck code names all land on it.
+ALIAS_19DOF = {
     "neck_pitch": "head",
     "head_pitch": "head",
     "head_yaw": "head",
@@ -59,7 +67,9 @@ ALIAS = {
 }
 
 
-def mjcf_name(code_name: str) -> str:
+def mjcf_name(code_name: str, legacy_19dof: bool = False) -> str:
+    if legacy_19dof and code_name in ALIAS_19DOF:
+        return ALIAS_19DOF[code_name]
     return ALIAS.get(code_name, code_name)
 
 
@@ -77,6 +87,25 @@ class _DelayBuffer:
             self._buf[i] = value
 
 
+class _StubViewer:
+    """Headless stand-in for mujoco.viewer.launch_passive (DUCK_SIM_VIEWER=0).
+
+    Lets the aligned controller run without WSLg — used by the automated
+    stand-test (scripts/verify_armless_14.py) and CI-style checks.
+    """
+
+    def __init__(self, model, data) -> None:
+        self.opt = mujoco.MjvOption()
+        self._model = model
+        self._data = data
+
+    def is_running(self) -> bool:
+        return True
+
+    def sync(self) -> None:
+        return
+
+
 class AlignedMuJoCoController:
     def __init__(
         self,
@@ -89,9 +118,11 @@ class AlignedMuJoCoController:
         delay_vel_ticks: int = 1,
         delay_gyro_ticks: int = 3,
         delay_quat_ticks: int = 4,
+        legacy_19dof: bool = False,
     ) -> None:
         self._stop_flag_path = Path(stop_flag_path)
         self._reset_source = reset_source
+        self._legacy_19dof = legacy_19dof
         self._model = mujoco.MjModel.from_xml_path(mjcf_path)
         self._data = mujoco.MjData(self._model)
 
@@ -100,7 +131,7 @@ class AlignedMuJoCoController:
         self._name_to_qvel_idx: dict[str, int] = {}
         missing = []
         for name in MOTOR_TO_ID:
-            mj = mjcf_name(name)
+            mj = mjcf_name(name, legacy_19dof=legacy_19dof)
             actuator_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_ACTUATOR, mj)
             joint_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, mj)
             if actuator_id < 0 or joint_id < 0:
@@ -162,7 +193,10 @@ class AlignedMuJoCoController:
         print("mapped code motors", list(self._name_to_actuator_idx))
         print("bam actuators", self._mj_actuator_names)
 
-        self._viewer = mujoco.viewer.launch_passive(self._model, self._data, key_callback=key_callback)
+        if os.environ.get("DUCK_SIM_VIEWER", "1") == "0":
+            self._viewer = _StubViewer(self._model, self._data)
+        else:
+            self._viewer = mujoco.viewer.launch_passive(self._model, self._data, key_callback=key_callback)
 
     def _apply_neutral(self) -> None:
         self._data.qpos[:] = 0.0
@@ -203,7 +237,7 @@ class AlignedMuJoCoController:
             for motor_id, pos in cmd.items():
                 delayed_pos = self._delay_act[motor_id].push_and_read(pos)
                 code = ID_TO_MOTOR[motor_id]
-                self._bam.set_q_target(mjcf_name(code), delayed_pos)
+                self._bam.set_q_target(mjcf_name(code, legacy_19dof=self._legacy_19dof), delayed_pos)
             self._bam.update()
             # clip current if bam exposes torque in ctrl
             kt = getattr(self._bam.model, "kt", None)
@@ -312,7 +346,11 @@ class AlignedMuJoCoController:
 def main() -> None:
     input_source = MuJoCoInputSource(move_keys={"h": "head", "v": "walk"})
     controller = AlignedMuJoCoController(
-        mjcf_path="src/model/mjcf/scene.xml",
+        # Armless 14-DoF MJCF (ticket #3); override with MJCF_ALIGNED=<path> to
+        # load e.g. the legacy 19-DoF robot.xml for comparison runs.
+        mjcf_path=os.environ.get(
+            "MJCF_ALIGNED", "src/model/mjcf/scene_armless_14.xml"
+        ),
         key_callback=input_source.key_callback,
         reset_source=input_source,
     )
